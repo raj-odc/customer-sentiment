@@ -1,0 +1,41 @@
+- rule_name: Login_2FA_Failure
+  aspect: Login
+  sentiment_less_than: -0.7
+  keywords: ["2fa", "code", "sms", "not receiving", "verification"]
+  suggestion: "Investigate SMS/email delivery service for 2FA codes. High probability of an issue with the third-party authentication provider. Action: Create a ticket to check logs for the authentication service."
+
+- rule_name: Performance_Crashes
+  aspect: Performance
+  sentiment_less_than: -0.7
+  keywords: ["crash", "crashing", "freeze", "slow", "lag"]
+  suggestion: "Users report crashes on startup. This often indicates a null pointer exception or an unhandled error in the initial loading sequence. Action: Create a high-priority ticket to analyze crash logs (e.g., Crashlytics) for the latest app version."
+
+- rule_name: Login_Slowness
+  aspect: Login
+  sentiment_less_than: -0.5
+  keywords: ["slow", "delay", "timeout", "loading"]
+  suggestion: "Negative sentiment around 'Login' is linked to slowness. This could be a database query or a slow network call in the authentication flow. Action: Create a ticket to profile the login API endpoint."
+
+- rule_name: UI_UX_Negative
+  aspect: UI/UX
+  sentiment_less_than: -0.5
+  keywords: ["confusing", "ugly", "hard", "difficult", "bad design"]
+  suggestion: "UI/UX issues reported. Consider conducting user experience research and A/B testing new interface designs. Action: Schedule UX review session."
+
+- rule_name: Battery_Drain
+  aspect: Battery
+  sentiment_less_than: -0.5
+  keywords: ["drain", "battery", "power", "consumption"]
+  suggestion: "Battery drain issues reported. Investigate background processes and optimize power consumption. Action: Profile app energy usage and optimize background tasks."
+
+- rule_name: Customer_Support_Issues
+  aspect: Customer Support
+  sentiment_less_than: -0.6
+  keywords: ["support", "help", "response", "service", "ticket"]
+  suggestion: "Customer support issues identified. Review support ticket handling processes and response times. Action: Analyze support metrics and improve response workflows."
+
+- rule_name: Pricing_Concerns
+  aspect: Pricing
+  sentiment_less_than: -0.4
+  keywords: ["expensive", "cost", "price", "subscription", "billing"]
+  suggestion: "Pricing concerns raised by users. Consider reviewing pricing strategy and offering alternative plans. Action: Conduct pricing analysis and competitor research."
