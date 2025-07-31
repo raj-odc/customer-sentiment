@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-SERPAPI_API_KEY = "018aee3a954d462a80ccbbbf4d0edc33b0c0f9b96a25686d3f1416eb0ec17d5b"  # Replace with your SerpApi key
+SERPAPI_API_KEY = "your_api_key"
 DATABASE_URL = "postgresql://review_user:review123@localhost:5432/reviews_db"
 
 # Initialize embedding model
