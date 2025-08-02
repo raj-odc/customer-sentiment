@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14
+    container_name: sentiment_postgres
+    environment:
+      POSTGRES_DB: reviews_db
+      POSTGRES_USER: review_user
+      POSTGRES_PASSWORD: review123
+      POSTGRES_ROOT_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./DB:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U review_user -d reviews_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Sentiment Analysis API
+  sentiment_api:
+    build: .
+    container_name: sentiment_api
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://review_user:review123@postgres:5432/reviews_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./suggestions.yaml:/app/suggestions.yaml
+      - ./templates:/app/templates
+
+volumes:
+  postgres_data:

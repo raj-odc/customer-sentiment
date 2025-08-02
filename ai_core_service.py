@@ -11,8 +11,11 @@ from transformers import (
 )
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.templating import Jinja2Templates
+import pandas as pd
+import io
 import time
 
 # Configure logging
@@ -226,7 +229,7 @@ class SuggestionEngine:
             with open(self.suggestions_file, 'r') as f:
                 return yaml.safe_load(f) or []
         except FileNotFoundError:
-            logger.warning(f"Suggestions file {self.suggestionsions_file} not found")
+            logger.warning(f"Suggestions file {self.suggestions_file} not found")
             return []
         except Exception as e:
             logger.error(f"Error loading suggestions: {e}")
@@ -425,6 +428,18 @@ class AICoreService:
             logger.error(f"Analysis pipeline failed: {e}")
             return self._error_response(text, str(e))
     
+    def analyze_batch(self, texts: list) -> list:
+        """Analyze multiple texts in batch"""
+        results = []
+        for text in texts:
+            try:
+                result = self.analyze(text)
+                results.append(result)
+            except Exception as e:
+                logger.error(f"Batch analysis error for text: {text[:50]}... Error: {e}")
+                results.append(self._error_response(text, str(e)))
+        return results
+    
     def _extract_text_span(self, text: str, aspect: str) -> str:
         """Extract relevant text span for the aspect"""
         # Simple implementation - find sentences containing aspect-related words
@@ -458,7 +473,10 @@ class AICoreService:
         }
 
 # Initialize FastAPI app
-app = FastAPI(title="AI Core Service")
+app = FastAPI(title="Customer Sentiment Analysis MVP", description="Complete sentiment analysis solution")
+
+# Mount static files and templates
+templates = Jinja2Templates(directory="templates")
 
 # Initialize AI Core Service with DB config
 db_config = {
@@ -502,7 +520,219 @@ async def analyze_endpoint(request: Request):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "AI Core"}
+    return {"status": "healthy", "service": "Customer Sentiment Analysis MVP"}
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Main dashboard endpoint"""
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Upload CSV or JSON file for batch analysis"""
+    try:
+        content = await file.read()
+        
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.StringIO(content.decode('utf-8')))
+            # Assume the text column is named 'text', 'review', or 'feedback'
+            text_column = None
+            for col in ['text', 'review', 'feedback', 'comment', 'message']:
+                if col in df.columns:
+                    text_column = col
+                    break
+            
+            if not text_column:
+                raise HTTPException(status_code=400, detail="No valid text column found. Expected columns: text, review, feedback, comment, or message")
+            
+            results = []
+            for idx, row in df.iterrows():
+                text = str(row[text_column]).strip()
+                if text and text != 'nan':
+                    analysis = ai_service.analyze(text)
+                    analysis['row_id'] = idx
+                    results.append(analysis)
+            
+            return {"message": f"Processed {len(results)} reviews", "results": results}
+            
+        elif file.filename.endswith('.json'):
+            data = json.loads(content.decode('utf-8'))
+            results = []
+            
+            if isinstance(data, list):
+                for idx, item in enumerate(data):
+                    text = item.get('text') or item.get('review') or item.get('feedback')
+                    if text:
+                        analysis = ai_service.analyze(text)
+                        analysis['row_id'] = idx
+                        results.append(analysis)
+            else:
+                text = data.get('text') or data.get('review') or data.get('feedback')
+                if text:
+                    analysis = ai_service.analyze(text)
+                    results.append(analysis)
+            
+            return {"message": f"Processed {len(results)} reviews", "results": results}
+        
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload CSV or JSON files.")
+            
+    except Exception as e:
+        logger.error(f"File upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+@app.get("/analytics")
+async def get_analytics():
+    """Get sentiment analytics from database"""
+    try:
+        if not ai_service.db:
+            return {"error": "Database not configured"}
+        
+        conn = ai_service.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                # Get overall sentiment distribution
+                cur.execute("""
+                    SELECT 
+                        CASE 
+                            WHEN overall_sentiment > 0.1 THEN 'Positive'
+                            WHEN overall_sentiment < -0.1 THEN 'Negative'
+                            ELSE 'Neutral'
+                        END as sentiment_category,
+                        COUNT(*) as count
+                    FROM ai_analysis_results
+                    GROUP BY sentiment_category
+                """)
+                sentiment_distribution = dict(cur.fetchall())
+                
+                # Get recent analyses
+                cur.execute("""
+                    SELECT original_text, overall_sentiment, processed_at
+                    FROM ai_analysis_results
+                    ORDER BY processed_at DESC
+                    LIMIT 10
+                """)
+                recent_analyses = cur.fetchall()
+                
+                # Get average sentiment over time (last 30 days)
+                cur.execute("""
+                    SELECT 
+                        DATE(processed_at) as date,
+                        AVG(overall_sentiment) as avg_sentiment,
+                        COUNT(*) as count
+                    FROM ai_analysis_results
+                    WHERE processed_at >= NOW() - INTERVAL '30 days'
+                    GROUP BY DATE(processed_at)
+                    ORDER BY date
+                """)
+                sentiment_trends = cur.fetchall()
+                
+                return {
+                    "sentiment_distribution": sentiment_distribution,
+                    "recent_analyses": [
+                        {
+                            "text": row[0][:100] + "..." if len(row[0]) > 100 else row[0],
+                            "sentiment": row[1],
+                            "processed_at": row[2].isoformat()
+                        } for row in recent_analyses
+                    ],
+                    "sentiment_trends": [
+                        {
+                            "date": row[0].isoformat(),
+                            "avg_sentiment": float(row[1]),
+                            "count": row[2]
+                        } for row in sentiment_trends
+                    ]
+                }
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        logger.error(f"Analytics error: {e}")
+        return {"error": f"Failed to fetch analytics: {str(e)}"}
+
+@app.get("/export")
+async def export_results():
+    """Export all analysis results as JSON"""
+    try:
+        if not ai_service.db:
+            return {"error": "Database not configured"}
+        
+        conn = ai_service.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT original_text, overall_sentiment, analysis_json, processed_at
+                    FROM ai_analysis_results
+                    ORDER BY processed_at DESC
+                """)
+                results = cur.fetchall()
+                
+                export_data = []
+                for row in results:
+                    export_data.append({
+                        "original_text": row[0],
+                        "overall_sentiment": row[1],
+                        "analysis": json.loads(row[2]) if row[2] else {},
+                        "processed_at": row[3].isoformat()
+                    })
+                
+                return {"data": export_data, "count": len(export_data)}
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        logger.error(f"Export error: {e}")
+        return {"error": f"Failed to export results: {str(e)}"}
+
+# Simple sentiment analysis fallback for lightweight usage
+from textblob import TextBlob
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+@app.post("/analyze/simple")
+async def analyze_simple(request: Request):
+    """Simple sentiment analysis using TextBlob and VADER (faster, lighter)"""
+    try:
+        data = await request.json()
+        text = data.get('text', '').strip()
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Text field is required")
+        
+        # TextBlob analysis
+        blob = TextBlob(text)
+        textblob_sentiment = blob.sentiment.polarity  # -1 to 1
+        
+        # VADER analysis
+        analyzer = SentimentIntensityAnalyzer()
+        vader_scores = analyzer.polarity_scores(text)
+        vader_sentiment = vader_scores['compound']  # -1 to 1
+        
+        # Combined score
+        combined_sentiment = (textblob_sentiment + vader_sentiment) / 2
+        
+        # Determine label
+        if combined_sentiment > 0.1:
+            sentiment_label = "Positive"
+        elif combined_sentiment < -0.1:
+            sentiment_label = "Negative"
+        else:
+            sentiment_label = "Neutral"
+        
+        result = {
+            "original_text": text,
+            "sentiment_score": round(combined_sentiment, 3),
+            "sentiment_label": sentiment_label,
+            "textblob_score": round(textblob_sentiment, 3),
+            "vader_score": round(vader_sentiment, 3),
+            "confidence": round(abs(combined_sentiment), 3)
+        }
+        
+        return JSONResponse(status_code=200, content=result)
+        
+    except Exception as e:
+        logger.error(f"Simple analysis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 # To run:
-# uvicorn ai_core_service:app --host 0.0.0.0 --port 5000
+# uvicorn ai_core_service:app --host 0.0.0.0 --port 5000 --reload

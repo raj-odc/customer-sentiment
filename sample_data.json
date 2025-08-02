@@ -1,0 +1,38 @@
+[
+  {
+    "text": "The new restaurant has amazing food and excellent service! The ambiance is perfect for a romantic dinner.",
+    "source": "google_reviews",
+    "rating": 5,
+    "category": "restaurant"
+  },
+  {
+    "text": "Food was cold when it arrived and the waiter was rude. Will not be coming back.",
+    "source": "google_reviews", 
+    "rating": 1,
+    "category": "restaurant"
+  },
+  {
+    "text": "The software interface is user-friendly and the performance is excellent. Great value for money!",
+    "source": "software_review",
+    "rating": 5,
+    "category": "software"
+  },
+  {
+    "text": "Too many bugs and crashes. Customer support is unresponsive. Very disappointed with this purchase.",
+    "source": "software_review",
+    "rating": 2,
+    "category": "software"
+  },
+  {
+    "text": "Hotel room was clean and comfortable. Staff was friendly and helpful throughout our stay.",
+    "source": "hotel_review",
+    "rating": 4,
+    "category": "hospitality"
+  },
+  {
+    "text": "Overpriced for the quality provided. Room was noisy and the WiFi didn't work properly.",
+    "source": "hotel_review",
+    "rating": 2,
+    "category": "hospitality"
+  }
+]

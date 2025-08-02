@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Sentiment Analysis Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Customer Sentiment Analysis Dashboard</h1>
+            <p class="text-gray-600">Real-time sentiment analysis and insights from customer feedback</p>
+        </div>
+
+        <!-- Quick Analysis Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <!-- Single Text Analysis -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4">Analyze Single Text</h2>
+                <textarea 
+                    id="singleText" 
+                    class="w-full p-3 border border-gray-300 rounded-md resize-none" 
+                    rows="4" 
+                    placeholder="Enter customer feedback here..."
+                ></textarea>
+                <div class="mt-4 flex gap-4">
+                    <button 
+                        id="analyzeBtn" 
+                        class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md"
+                        onclick="analyzeSingle()"
+                    >
+                        Analyze Sentiment
+                    </button>
+                    <button 
+                        id="analyzeSimpleBtn" 
+                        class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md"
+                        onclick="analyzeSimple()"
+                    >
+                        Quick Analysis
+                    </button>
+                </div>
+                <div id="singleResult" class="mt-4 hidden">
+                    <div class="p-4 bg-gray-50 rounded-md">
+                        <div id="singleResultContent"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Upload -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4">Batch Upload Analysis</h2>
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <input 
+                        type="file" 
+                        id="fileUpload" 
+                        accept=".csv,.json" 
+                        class="hidden"
+                        onchange="handleFileUpload(event)"
+                    >
+                    <button 
+                        onclick="document.getElementById('fileUpload').click()"
+                        class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md"
+                    >
+                        Choose CSV or JSON File
+                    </button>
+                    <p class="text-gray-500 mt-2">Upload customer feedback data for batch analysis</p>
+                </div>
+                <div id="uploadResult" class="mt-4 hidden">
+                    <div class="p-4 bg-gray-50 rounded-md">
+                        <div id="uploadResultContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Dashboard -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            <!-- Sentiment Distribution -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">Sentiment Distribution</h3>
+                <canvas id="sentimentChart"></canvas>
+            </div>
+
+            <!-- Sentiment Trends -->
+            <div class="bg-white rounded-lg shadow-md p-6 lg:col-span-2">
+                <h3 class="text-lg font-semibold mb-4">Sentiment Trends (Last 30 Days)</h3>
+                <canvas id="trendsChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Analyses -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">Recent Analyses</h3>
+                <button 
+                    onclick="exportResults()"
+                    class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
+                >
+                    Export All Results
+                </button>
+            </div>
+            <div id="recentAnalyses" class="space-y-4">
+                <p class="text-gray-500">Loading recent analyses...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sentimentChart, trendsChart;
+
+        // Initialize dashboard
+        window.onload = function() {
+            loadAnalytics();
+            // Refresh analytics every 30 seconds
+            setInterval(loadAnalytics, 30000);
+        };
+
+        async function analyzeSingle() {
+            const text = document.getElementById('singleText').value.trim();
+            if (!text) {
+                alert('Please enter some text to analyze');
+                return;
+            }
+
+            const btn = document.getElementById('analyzeBtn');
+            const originalText = btn.textContent;
+            btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: text })
+                });
+
+                const result = await response.json();
+                displaySingleResult(result);
+            } catch (error) {
+                alert('Error analyzing text: ' + error.message);
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function analyzeSimple() {
+            const text = document.getElementById('singleText').value.trim();
+            if (!text) {
+                alert('Please enter some text to analyze');
+                return;
+            }
+
+            const btn = document.getElementById('analyzeSimpleBtn');
+            const originalText = btn.textContent;
+            btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/analyze/simple', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: text })
+                });
+
+                const result = await response.json();
+                displaySimpleResult(result);
+            } catch (error) {
+                alert('Error analyzing text: ' + error.message);
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        function displaySingleResult(result) {
+            const resultDiv = document.getElementById('singleResult');
+            const contentDiv = document.getElementById('singleResultContent');
+            
+            let html = `
+                <h4 class="font-semibold mb-2">Analysis Result</h4>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <span class="font-medium">Overall Sentiment:</span>
+                        <span class="ml-2 px-2 py-1 rounded text-sm ${getSentimentColor(result.overall_sentiment)}">
+                            ${result.overall_sentiment > 0.1 ? 'Positive' : result.overall_sentiment < -0.1 ? 'Negative' : 'Neutral'}
+                            (${result.overall_sentiment})
+                        </span>
+                    </div>
+                    <div>
+                        <span class="font-medium">Processing Time:</span>
+                        <span class="ml-2">${result.processing_time_ms}ms</span>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <h5 class="font-medium">Aspect Analysis:</h5>
+            `;
+            
+            if (result.analysis && result.analysis.length > 0) {
+                result.analysis.forEach(aspect => {
+                    html += `
+                        <div class="border-l-2 ${getAspectBorderColor(aspect.sentiment_score)} pl-3 py-1">
+                            <div class="flex justify-between items-center">
+                                <span class="font-medium">${aspect.aspect}</span>
+                                <span class="px-2 py-1 rounded text-sm ${getSentimentColor(aspect.sentiment_score)}">
+                                    ${aspect.sentiment_label} (${aspect.sentiment_score})
+                                </span>
+                            </div>
+                            ${aspect.suggestion ? `<p class="text-sm text-gray-600 mt-1"><strong>Suggestion:</strong> ${aspect.suggestion}</p>` : ''}
+                        </div>
+                    `;
+                });
+            }
+            
+            html += '</div>';
+            contentDiv.innerHTML = html;
+            resultDiv.classList.remove('hidden');
+        }
+
+        function displaySimpleResult(result) {
+            const resultDiv = document.getElementById('singleResult');
+            const contentDiv = document.getElementById('singleResultContent');
+            
+            const html = `
+                <h4 class="font-semibold mb-2">Quick Analysis Result</h4>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <span class="font-medium">Sentiment:</span>
+                        <span class="ml-2 px-2 py-1 rounded text-sm ${getSentimentColor(result.sentiment_score)}">
+                            ${result.sentiment_label} (${result.sentiment_score})
+                        </span>
+                    </div>
+                    <div>
+                        <span class="font-medium">Confidence:</span>
+                        <span class="ml-2">${result.confidence}</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600">
+                    <p><strong>TextBlob:</strong> ${result.textblob_score}</p>
+                    <p><strong>VADER:</strong> ${result.vader_score}</p>
+                </div>
+            `;
+            
+            contentDiv.innerHTML = html;
+            resultDiv.classList.remove('hidden');
+        }
+
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const resultDiv = document.getElementById('uploadResult');
+            const contentDiv = document.getElementById('uploadResultContent');
+            
+            contentDiv.innerHTML = '<span class="spinner"></span> Processing file...';
+            resultDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                let html = `
+                    <h4 class="font-semibold mb-2">${result.message}</h4>
+                    <div class="max-h-64 overflow-y-auto space-y-2">
+                `;
+                
+                if (result.results && result.results.length > 0) {
+                    result.results.forEach((analysis, index) => {
+                        html += `
+                            <div class="p-2 border rounded text-sm">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-medium">Row ${analysis.row_id + 1}</span>
+                                    <span class="px-2 py-1 rounded text-xs ${getSentimentColor(analysis.overall_sentiment)}">
+                                        ${analysis.overall_sentiment > 0.1 ? 'Positive' : analysis.overall_sentiment < -0.1 ? 'Negative' : 'Neutral'}
+                                    </span>
+                                </div>
+                                <p class="text-gray-600 mt-1">${analysis.original_text.substring(0, 100)}...</p>
+                            </div>
+                        `;
+                    });
+                }
+                
+                html += '</div>';
+                contentDiv.innerHTML = html;
+                
+                // Refresh analytics after upload
+                loadAnalytics();
+                
+            } catch (error) {
+                contentDiv.innerHTML = `<p class="text-red-600">Error: ${error.message}</p>`;
+            }
+        }
+
+        async function loadAnalytics() {
+            try {
+                const response = await fetch('/analytics');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.log('Analytics not available:', data.error);
+                    return;
+                }
+                
+                updateSentimentChart(data.sentiment_distribution);
+                updateTrendsChart(data.sentiment_trends);
+                updateRecentAnalyses(data.recent_analyses);
+                
+            } catch (error) {
+                console.log('Failed to load analytics:', error);
+            }
+        }
+
+        function updateSentimentChart(distribution) {
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+            
+            if (sentimentChart) {
+                sentimentChart.destroy();
+            }
+            
+            sentimentChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Positive', 'Negative', 'Neutral'],
+                    datasets: [{
+                        data: [
+                            distribution.Positive || 0,
+                            distribution.Negative || 0,
+                            distribution.Neutral || 0
+                        ],
+                        backgroundColor: ['#10B981', '#EF4444', '#6B7280']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateTrendsChart(trends) {
+            const ctx = document.getElementById('trendsChart').getContext('2d');
+            
+            if (trendsChart) {
+                trendsChart.destroy();
+            }
+            
+            trendsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: trends.map(t => t.date),
+                    datasets: [{
+                        label: 'Average Sentiment',
+                        data: trends.map(t => t.avg_sentiment),
+                        borderColor: '#3B82F6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            min: -1,
+                            max: 1
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateRecentAnalyses(analyses) {
+            const container = document.getElementById('recentAnalyses');
+            
+            if (!analyses || analyses.length === 0) {
+                container.innerHTML = '<p class="text-gray-500">No recent analyses found</p>';
+                return;
+            }
+            
+            let html = '';
+            analyses.forEach(analysis => {
+                html += `
+                    <div class="p-4 border rounded-lg">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="px-2 py-1 rounded text-sm ${getSentimentColor(analysis.sentiment)}">
+                                ${analysis.sentiment > 0.1 ? 'Positive' : analysis.sentiment < -0.1 ? 'Negative' : 'Neutral'}
+                                (${analysis.sentiment})
+                            </span>
+                            <span class="text-sm text-gray-500">${new Date(analysis.processed_at).toLocaleString()}</span>
+                        </div>
+                        <p class="text-gray-700">${analysis.text}</p>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        async function exportResults() {
+            try {
+                const response = await fetch('/export');
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert('Export failed: ' + data.error);
+                    return;
+                }
+                
+                // Download as JSON file
+                const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `sentiment_analysis_export_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                alert(`Exported ${data.count} analysis results`);
+                
+            } catch (error) {
+                alert('Export failed: ' + error.message);
+            }
+        }
+
+        function getSentimentColor(score) {
+            if (score > 0.1) return 'bg-green-100 text-green-800';
+            if (score < -0.1) return 'bg-red-100 text-red-800';
+            return 'bg-gray-100 text-gray-800';
+        }
+
+        function getAspectBorderColor(score) {
+            if (score > 0.1) return 'border-green-500';
+            if (score < -0.1) return 'border-red-500';
+            return 'border-gray-500';
+        }
+    </script>
+</body>
+</html>
