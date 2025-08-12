@@ -4,6 +4,9 @@ Customer Sentiment Analysis MVP Startup Script
 This script provides different ways to start the sentiment analysis system.
 """
 
+from dotenv import load_dotenv
+load_dotenv()  # Add this line to load environment variables
+
 import subprocess
 import sys
 import os
@@ -58,7 +61,7 @@ def start_development_server():
         subprocess.run([
             "uvicorn", "ai_core_service:app", 
             "--host", "0.0.0.0", 
-            "--port", "5000", 
+            "--port", "5001", 
             "--reload"
         ], check=True)
     except KeyboardInterrupt:
